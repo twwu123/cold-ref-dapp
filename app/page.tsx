@@ -7,7 +7,6 @@ import {
   MeshTxBuilder,
   resolveScriptHash,
 } from "@meshsdk/core";
-import axios from "axios";
 
 type WasmModule = typeof import("@emurgo/cardano-serialization-lib-browser");
 
@@ -23,6 +22,7 @@ export default function Home() {
   const [wallet, setWallet] = useState<BrowserWallet | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [tab, setTab] = useState<string>("mintNFT");
+  const [network, setNetwork] = useState<"preprod" | "mainnet">("preprod");
   // For NFT minting
   const [nftInput, setNftInput] = useState<string>("");
   const [nftOutputAddress, setNftOutputAddress] = useState<string>("");
@@ -56,6 +56,11 @@ export default function Home() {
   useEffect(() => {
     const getBalance = async () => {
       if (wallet) {
+        if ((await wallet.getNetworkId()) === 1) {
+          setNetwork("mainnet");
+        } else {
+          setNetwork("preprod");
+        }
         setBalance(await wallet.getLovelace());
       }
     };
@@ -64,16 +69,14 @@ export default function Home() {
 
   const testColdRef = async () => {
     const blockfrost = new BlockfrostProvider(
-      process.env.NEXT_PUBLIC_BLOCKFROST_API_KEY!
+      network === "preprod"
+        ? process.env.NEXT_PUBLIC_PREPROD_BLOCKFROST_API_KEY!
+        : process.env.NEXT_PUBLIC_MAINNET_BLOCKFROST_API_KEY!
     );
     const txBuilder = new MeshTxBuilder({
       fetcher: blockfrost,
       evaluator: blockfrost,
     });
-    const collateralInputs = await wallet?.getCollateral();
-    if (!collateralInputs) {
-      throw new Error("Please set collateral in wallet");
-    }
 
     txBuilder
       .txIn(coldRefInput.split("#")[0], Number(coldRefInput.split("#")[1]))
@@ -81,20 +84,27 @@ export default function Home() {
         coldRefFeeInput.split("#")[0],
         Number(coldRefFeeInput.split("#")[1])
       )
-      .txOut(coldRefOutputAddress, [
-        {
-          quantity: "1",
-          unit: coldRefNftPolicy,
-        },
-      ])
-      .txOutInlineDatumValue(coldRefDatum, "JSON")
-      .changeAddress(coldRefChangeAddress);
+      .setNetwork(network)
+      .txOutInlineDatumValue(coldRefDatum, "JSON");
+
+    if (coldRefChangeAddress === "" || !coldRefChangeAddress) {
+      txBuilder.changeAddress(coldRefOutputAddress);
+    } else {
+      txBuilder
+        .txOut(nftOutputAddress, [
+          {
+            unit: coldRefNftPolicy,
+            quantity: "1",
+          },
+        ])
+        .changeAddress(coldRefChangeAddress);
+    }
 
     try {
       const txHex = await txBuilder.complete();
-      const signedTxHex = await wallet?.signTx(txHex);
-      const nftMintTxHash = await wallet?.submitTx(signedTxHex!);
-      console.log(nftMintTxHash);
+      const signedTxHex = await wallet?.signTx(txHex, true);
+      const coldRefTxHash = await wallet?.submitTx(signedTxHex!);
+      console.log(coldRefTxHash);
     } catch (err) {
       console.log(err);
     }
@@ -133,15 +143,17 @@ export default function Home() {
     );
 
     const blockfrost = new BlockfrostProvider(
-      process.env.NEXT_PUBLIC_BLOCKFROST_API_KEY!
+      network === "preprod"
+        ? process.env.NEXT_PUBLIC_PREPROD_BLOCKFROST_API_KEY!
+        : process.env.NEXT_PUBLIC_MAINNET_BLOCKFROST_API_KEY!
     );
     const txBuilder = new MeshTxBuilder({
       fetcher: blockfrost,
       evaluator: blockfrost,
     });
-    const collateralInputs = await wallet?.getCollateral();
-    if (!collateralInputs) {
-      throw new Error("Please set collateral in wallet");
+    let collateralInputs = await wallet?.getCollateral();
+    if (!collateralInputs || collateralInputs.length === 0) {
+      collateralInputs = [(await blockfrost.fetchUTxOs(txHash))[0]];
     }
     txBuilder
       .txIn(txHash, Number(txIndex))
@@ -149,21 +161,28 @@ export default function Home() {
       .mint("1", resolveScriptHash(script, "V2"), "")
       .mintRedeemerValue("")
       .mintingScript(script)
-      .txOut(nftOutputAddress, [
-        {
-          unit: resolveScriptHash(script, "V2"),
-          quantity: "1",
-        },
-      ])
       .txInCollateral(
-        collateralInputs![0].input.txHash,
-        collateralInputs![0].input.outputIndex
+        collateralInputs[0].input.txHash,
+        Number(collateralInputs[0].input.outputIndex)
       )
-      .changeAddress(nftMintChangeAddress);
+      .setNetwork(network);
+
+    if (nftMintChangeAddress === "" || !nftMintChangeAddress) {
+      txBuilder.changeAddress(nftOutputAddress);
+    } else {
+      txBuilder
+        .txOut(nftOutputAddress, [
+          {
+            unit: resolveScriptHash(script, "V2"),
+            quantity: "1",
+          },
+        ])
+        .changeAddress(nftMintChangeAddress);
+    }
 
     try {
       const txHex = await txBuilder.complete();
-      const signedTxHex = await wallet?.signTx(txHex);
+      const signedTxHex = await wallet?.signTx(txHex, true);
       const nftMintTxHash = await wallet?.submitTx(signedTxHex!);
       console.log(nftMintTxHash);
     } catch (err) {
