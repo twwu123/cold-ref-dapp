@@ -10,8 +10,9 @@
   },
   "dependencies": {
     "@emurgo/cardano-serialization-lib-browser": "^13.2.0",
-    "@meshsdk/core": "^1.7.19",
-    "@meshsdk/react": "^1.7.19",
+    "@meshsdk/core": "^1.7.31",
+    "@meshsdk/react": "^1.7.31",
+    "@meshsdk/core-csl": "1.7.31",
     "axios": "^1.7.7",
     "next": "15.0.3",
     "react": "19.0.0-rc-66855b96-20241106",
