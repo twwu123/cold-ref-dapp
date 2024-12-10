@@ -20,7 +20,7 @@ export default function CreateColdRef(
   const [coldRefOutputAddress, setColdRefOutputAddress] = useState<string>("");
   const [coldRefChangeAddress, setColdRefChangeAddress] = useState<string>("");
 
-  const testColdRef = async () => {
+  const createColdRef = async () => {
     const blockfrost = new BlockfrostProvider(
       network === "preprod"
         ? process.env.NEXT_PUBLIC_PREPROD_BLOCKFROST_API_KEY!
@@ -37,11 +37,10 @@ export default function CreateColdRef(
         coldRefFeeInput.split("#")[0],
         Number(coldRefFeeInput.split("#")[1])
       )
-      .setNetwork(network)
-      .txOutInlineDatumValue(coldRefDatum, "JSON");
+      .setNetwork(network);
 
     if (coldRefChangeAddress === "" || !coldRefChangeAddress) {
-      txBuilder.changeAddress(coldRefOutputAddress);
+      throw new Error("Must use a change address for this transaction");
     } else {
       txBuilder
         .txOut(coldRefOutputAddress, [
@@ -50,6 +49,7 @@ export default function CreateColdRef(
             quantity: "1",
           },
         ])
+        .txOutInlineDatumValue(coldRefDatum, "JSON")
         .changeAddress(coldRefChangeAddress);
     }
 
@@ -146,7 +146,7 @@ export default function CreateColdRef(
         ></input>
       </div>
       <button
-        onClick={() => testColdRef()}
+        onClick={() => createColdRef()}
         type="button"
         className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
       >
